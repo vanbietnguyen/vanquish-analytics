@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { tableFromIPC } from 'apache-arrow';
 
-// Define __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -23,6 +22,14 @@ async function getArrowFileStats(folderPath: string) {
 
       const numRows = table.numRows;
       totalRows += numRows;
+
+      // Log the first row, if available
+      const firstRow = numRows > 0 ? table.get(0) : null;
+      if (firstRow) {
+        console.log(`First row of ${file}:`, firstRow);
+      } else {
+        console.log(`File ${file} is empty.`);
+      }
 
       // Gather basic stats for each file
       fileStats.push({
