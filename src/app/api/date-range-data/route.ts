@@ -19,7 +19,8 @@ export async function GET(request: Request) {
       endDate
     );
     return NextResponse.json({ data });
-  } catch (error: any | unknown) {
+  } catch (error) {
+    console.error(error);
     return NextResponse.json({ error: 'Failed to load data' }, { status: 500 });
   }
 }
