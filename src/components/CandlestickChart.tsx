@@ -8,18 +8,17 @@ import { calculateTrend } from "~/utils/calculateThreePointTrendLines";
 import { useVirtualizer } from "@tanstack/react-virtual";
 // import type TickData from "~/types/TickData.type";
 import useDebouncedCallback from "~/hooks/useDebounceCallback";
-import { OHLCData } from "~/types";
+import { OHLCData, Trend, TrendLine } from "~/types";
 
 type ChartProps = {
   data?: OHLCData[];
+  trendLines?: Trend[];
   defaultMax?: number;
   defaultMin?: number;
 };
 
-const CandlestickChart: React.FC<ChartProps> = ({ data = [], defaultMax, defaultMin }) => {
+const CandlestickChart: React.FC<ChartProps> = ({ data = [], defaultMax, defaultMin, trendLines = []}) => {
   const dimensions = useWindowDimensions();
-  const minorTrendLines = useMemo(() => calculateTrend(data), [data]);
-  const majorTrendLines = useMemo(() => calculateTrend(data, 10), [data]);
 
   const [mouseCoords, setMouseCoords] = useState({ x: 0, y: 0 });
 
@@ -28,12 +27,6 @@ const CandlestickChart: React.FC<ChartProps> = ({ data = [], defaultMax, default
   const containerRef = useRef<HTMLDivElement>(null);
   const gap = 2;
   const candleWidth = 1;
-  //   Math.max(
-  //   1,
-  //   Math.floor((dimensions.width - gap * (data.length - 1)) / data.length)
-  // );
-
-  console.log('candleWidth', candleWidth);
 
   const priceMax = defaultMax ?? Math.ceil(d3.max(data.map((bar) => bar.high))! + 10) ;
   const priceMin = defaultMin ?? Math.floor(d3.min(data.map((bar) => bar.low))! - 10);
@@ -185,7 +178,7 @@ const CandlestickChart: React.FC<ChartProps> = ({ data = [], defaultMax, default
           })}
 
           {/* Render Trendlines */}
-          {minorTrendLines.map((line, index) => {
+          {trendLines.map((line, index) => {
             const start = line.points[0];
             const end = line.points[line.points.length - 1];
 
@@ -197,24 +190,6 @@ const CandlestickChart: React.FC<ChartProps> = ({ data = [], defaultMax, default
                 x2={end.x * (candleWidth + gap)}
                 y2={pixelFor(end.y)}
                 stroke={line.direction === "up" ? "green" : "red"}
-                strokeWidth="2"
-                strokeDasharray={line.direction === "down" ? "4 4" : undefined}
-              />
-            );
-          })}
-
-          {majorTrendLines.map((line, index) => {
-            const start = line.points[0];
-            const end = line.points[line.points.length - 1];
-
-            return (
-              <line
-                key={`trendline-${index}`}
-                x1={start.x * (candleWidth + gap)}
-                y1={pixelFor(start.y)}
-                x2={end.x * (candleWidth + gap)}
-                y2={pixelFor(end.y)}
-                stroke={"orange"}
                 strokeWidth="2"
                 strokeDasharray={line.direction === "down" ? "4 4" : undefined}
               />
