@@ -13,6 +13,7 @@ import { Trend, Point } from "~/types";
 const SimulatedChart = () => {
   const [ticksPerInterval, setTicksPerInterval] = useState(200);
   const [trendLines, setTrendLines] = useState<Trend[]>([]);
+  const folderPath = "src/parsers/data";
 
   const { data: tickData, isLoading, error } = useMockData();
   const { liveData, start, stop, restart, isRunning } = useSimulatedLiveData(
@@ -25,6 +26,7 @@ const SimulatedChart = () => {
   const ogData = useMemo(() => aggregateTicksToOHLC(tickData, 2000), [tickData]);
   const data = useMemo(() => aggregateTicksToOHLC(liveData, 2000), [liveData]);
 
+  // add min value
   const priceMax = useMemo(
     () => Math.ceil(d3.max(ogData.map((bar) => bar.high))! + 10),
     [ogData],
@@ -34,10 +36,15 @@ const SimulatedChart = () => {
     [ogData],
   );
 
-  // Handle trendline updates
   useEffect(() => {
     if (data.length === 0) return;
 
+    // TODO add a new attribute that is a boolean - if the data is either above or below depending on the trend direction
+    //  (above === uptrend, below ==== downtrend),
+    //  then we don't make any more trends in the same direction
+    // once it goes a certain amount of distance in the opposite direction, we switch the boolean
+    // then we close the trade and go in the opposite direction once a trend is identified
+    // same rule applies to the next trend
     const newTrends = calculateTrend(data);
 
     setTrendLines((prevTrends) => {
@@ -46,14 +53,32 @@ const SimulatedChart = () => {
         const slope = (lastPoint.y - prevTrend.points[0].y) / (lastPoint.x - prevTrend.points[0].x);
 
         // Extend the trendline by projecting the slope
-        const nextX = data.length - 1;
+        const nextX = Math.min(data.length - 1, lastPoint.x + 10); // Add a cushion of +10 bars
         const nextY = lastPoint.y + slope * (nextX - lastPoint.x);
+
+        const overlappingTrend = newTrends.find((newTrend) => {
+          const newTrendStartX = newTrend.points[0].x;
+          return newTrendStartX >= lastPoint.x && newTrendStartX <= nextX;
+        });
+
+        if (overlappingTrend) {
+          // Stop extending at the start of the overlapping trend
+          const stopX = overlappingTrend.points[0].x;
+          const stopY = lastPoint.y + slope * (stopX - lastPoint.x);
+          return {
+            ...prevTrend,
+            points: [
+              prevTrend.points[0],
+              { x: stopX, y: stopY } as Point,
+            ],
+          };
+        }
 
         return {
           ...prevTrend,
           points: [
             prevTrend.points[0],
-            { x: nextX, y: nextY } as Point, // Extend the trendline
+            { x: nextX, y: nextY } as Point,
           ],
         };
       });
