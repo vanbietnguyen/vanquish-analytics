@@ -106,96 +106,114 @@ const CandlestickChart: React.FC<ChartProps> = ({ tickData = [] }) => {
 
   return (
     <div
-      ref={containerRef}
       style={{
         width: dimensions.width,
         height: dimensions.height,
-        overflowX: "auto",
-        overflowY: "hidden",
+        display: "flex", // Use flexbox to align the Y-axis and chart
         position: "relative",
       }}
     >
+      {/* Y-Axis Container */}
       <svg
-        width={rowVirtualizer.getTotalSize()}
+        width={50} // Fixed width for Y-axis labels
         height={chartDims.pixelHeight}
         className="bg-chart-bg text-white"
-        onMouseMove={onMouseMoveInside}
-        onClick={() =>
-          console.log(`Click at ${mouseCoords.x}, ${mouseCoords.y}`)
-        }
-        onMouseLeave={onMouseLeave}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          zIndex: 1,
+        }}
       >
-        {/* Render Y-Axis Labels */}
         {yTicks.map((tick, index) => (
-          <g
+          <text
             key={`y-tick-${index}`}
-            transform={`translate(0, ${pixelFor(tick)})`}
+            x={30} // Position the text within the Y-axis container
+            y={pixelFor(tick)}
+            fill="white"
+            fontSize="10"
+            textAnchor="end"
           >
-            <line
-              x1={40} // Reserve space for labels
-              x2={dimensions.width}
-              stroke="gray"
-              strokeWidth="0.5"
-              strokeDasharray="4 4"
-            />
-            <text x="30" y="5" fill="white" fontSize="10" textAnchor="end">
-              {tick}
-            </text>
-          </g>
+            {tick}
+          </text>
         ))}
-
-        {/* Render Virtualized Candles */}
-        {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-          const bar = data[virtualItem.index];
-          const candleX = virtualItem.start;
-
-          return (
-            <Candle
-              key={virtualItem.index}
-              data={bar}
-              x={candleX}
-              candle_width={candleWidth}
-              pixelFor={pixelFor}
-            />
-          );
-        })}
-
-        {/* Render Trendlines */}
-        {trendLines.map((line, index) => {
-          const start = line.points[0];
-          const end = line.points[line.points.length - 1];
-
-          return (
-            <line
-              key={`trendline-${index}`}
-              x1={start.x * (candleWidth + gap)}
-              y1={pixelFor(start.y)}
-              x2={end.x * (candleWidth + gap)}
-              y2={pixelFor(end.y)}
-              stroke={line.direction === "up" ? "green" : "red"}
-              strokeWidth="2"
-              strokeDasharray={line.direction === "down" ? "4 4" : undefined} // Dotted for downtrend (optional)
-            />
-          );
-        })}
-
-        {/* Display CrossHairs */}
-        <CrossHairs
-          x={mouseCoords.x}
-          y={mouseCoords.y}
-          chart_dims={chartDims}
-        />
-
-        {/* Display Mouse Coordinates */}
-        <text x="10" y="16" fill="white" fontSize="10">
-          <tspan>
-            Mouse: {mouseCoords.x}, {mouseCoords.y}
-          </tspan>
-          <tspan x="10" y="30">
-            Dollars: ${dollarAt(mouseCoords.y)}
-          </tspan>
-        </text>
       </svg>
+
+      {/* Chart Container */}
+      <div
+        ref={containerRef}
+        style={{
+          width: dimensions.width - 50, // Subtract Y-axis width
+          height: dimensions.height,
+          overflowX: "auto",
+          overflowY: "hidden",
+          position: "relative",
+          marginLeft: 50, // Offset to align with Y-axis
+        }}
+      >
+        <svg
+          width={rowVirtualizer.getTotalSize()}
+          height={chartDims.pixelHeight}
+          className="bg-chart-bg text-white"
+          onMouseMove={onMouseMoveInside}
+          onClick={() =>
+            console.log(`Click at ${mouseCoords.x}, ${mouseCoords.y}`)
+          }
+          onMouseLeave={onMouseLeave}
+        >
+          {/* Render Virtualized Candles */}
+          {rowVirtualizer.getVirtualItems().map((virtualItem) => {
+            const bar = data[virtualItem.index];
+            const candleX = virtualItem.start;
+
+            return (
+              <Candle
+                key={virtualItem.index}
+                data={bar}
+                x={candleX}
+                candle_width={candleWidth}
+                pixelFor={pixelFor}
+              />
+            );
+          })}
+
+          {/* Render Trendlines */}
+          {trendLines.map((line, index) => {
+            const start = line.points[0];
+            const end = line.points[line.points.length - 1];
+
+            return (
+              <line
+                key={`trendline-${index}`}
+                x1={start.x * (candleWidth + gap)}
+                y1={pixelFor(start.y)}
+                x2={end.x * (candleWidth + gap)}
+                y2={pixelFor(end.y)}
+                stroke={line.direction === "up" ? "green" : "red"}
+                strokeWidth="2"
+                strokeDasharray={line.direction === "down" ? "4 4" : undefined}
+              />
+            );
+          })}
+
+          {/* Display CrossHairs */}
+          <CrossHairs
+            x={mouseCoords.x}
+            y={mouseCoords.y}
+            chart_dims={chartDims}
+          />
+
+          {/* Display Mouse Coordinates */}
+          <text x="10" y="16" fill="white" fontSize="10">
+            <tspan>
+              Mouse: {mouseCoords.x}, {mouseCoords.y}
+            </tspan>
+            <tspan x="10" y="30">
+              Dollars: ${dollarAt(mouseCoords.y)}
+            </tspan>
+          </text>
+        </svg>
+      </div>
     </div>
   );
 };
