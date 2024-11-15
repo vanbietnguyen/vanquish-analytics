@@ -4,7 +4,7 @@ import Candle from "./Candle";
 import CrossHairs from "~/components/CrossHairs";
 import { useWindowDimensions } from "~/hooks/useWindowDimensions";
 import aggregateTicksToOHLC from "~/utils/aggregateTicksToOHLC";
-import calculateThreePointTrendLines from "~/utils/calculateThreePointTrendLines";
+import { calculateTrend } from "~/utils/calculateThreePointTrendLines";
 import type TickData from "~/types/TickData.type";
 
 type ChartProps = {
@@ -15,7 +15,7 @@ const CandlestickChart: React.FC<ChartProps> = ({ tickData = [] }) => {
   const dimensions = useWindowDimensions();
   const data = useMemo(() => aggregateTicksToOHLC(tickData, 2000), [tickData]);
 
-  const trendLines = useMemo(() => calculateThreePointTrendLines(data), [data]);
+  const trendLines = useMemo(() => calculateTrend(data), [data]);
 
   console.log('trendLines', trendLines);
 

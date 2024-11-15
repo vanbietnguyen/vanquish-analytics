@@ -46,10 +46,8 @@ const findValidTrends = (
   let currentTrend: Point[] = [];
   let initialSlope: number | null = null;
 
-  for (let i = 0; i < turningPoints.length; i++) {
-    const currentPoint = turningPoints[i];
+  for (const currentPoint of turningPoints) {
     const lastPoint = currentTrend[currentTrend.length - 1];
-
     if (!lastPoint) {
       // Start a new trend with the first point
       currentTrend.push(currentPoint);
@@ -134,8 +132,7 @@ const calculateTrendLine = (
 
 // Main function to calculate trend lines with three-touch rule
 const calculateThreePointTrendLines = (data: OHLCData[]): TrendLine[] => {
-  const turningPoints = findSequentialTurningPoints(data, 4);
-  console.log('turningPoints', turningPoints);
+  const turningPoints = findSequentialTurningPoints(data, 5);
   const validTrends = findValidTrends(turningPoints, 3);
 
   return validTrends
@@ -154,4 +151,4 @@ const calculateThreePointTrendLines = (data: OHLCData[]): TrendLine[] => {
     .filter(Boolean) as TrendLine[];
 };
 
-export default calculateThreePointTrendLines;
+export { calculateThreePointTrendLines as calculateTrend };
