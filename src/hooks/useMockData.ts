@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type TickData from "~/types/TickData.type";
+import { useEffect, useMemo, useState } from "react";
 
 const fetchDateRangeData = async (): Promise<TickData[]> => {
   const response: Response = await fetch(`/api/mock-range-data`);
@@ -14,13 +15,21 @@ const fetchDateRangeData = async (): Promise<TickData[]> => {
 
 
 const useMockData = () => {
+  const [cachedData, setCachedData] = useState([]);
   const { data, error, isLoading, isError, isFetching, refetch, status, isSuccess } = useQuery({
     queryKey: ['mockData'],
     queryFn: fetchDateRangeData,
+    enabled: cachedData.length === 0,
   });
 
+  useEffect(() => {
+    if (data && isSuccess) {
+      setCachedData(data);
+    }
+  }, [data, isSuccess])
+
   return {
-    data,
+    data: data ?? cachedData,
     error,
     isLoading,
     isError,

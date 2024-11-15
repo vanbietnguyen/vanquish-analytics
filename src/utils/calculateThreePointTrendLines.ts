@@ -38,7 +38,7 @@ const findSequentialTurningPoints = (
 const findValidTrends = (
   turningPoints: Point[],
   minTouches = 3,
-  angleTolerance = 0.3// Maximum allowable slope deviation
+  angleTolerance = 0.1// Maximum allowable slope deviation
 ): Trend[] => {
   if (turningPoints.length < 2) return [];
 
@@ -131,9 +131,9 @@ const calculateTrendLine = (
 };
 
 // Main function to calculate trend lines with three-touch rule
-const calculateThreePointTrendLines = (data: OHLCData[]): TrendLine[] => {
-  const turningPoints = findSequentialTurningPoints(data, 5);
-  const validTrends = findValidTrends(turningPoints, 3);
+const calculateThreePointTrendLines = (data: OHLCData[], windowSize = 2, angleTolerance = 0.1): TrendLine[] => {
+  const turningPoints = findSequentialTurningPoints(data, windowSize);
+  const validTrends = findValidTrends(turningPoints, 3, angleTolerance);
 
   return validTrends
     .filter((trend) => trend.points.length >= 3)
