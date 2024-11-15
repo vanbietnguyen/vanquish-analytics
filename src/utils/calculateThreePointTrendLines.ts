@@ -35,46 +35,65 @@ const findSequentialTurningPoints = (
 };
 
 // Function to find valid trends based on captured turning points
-const findValidTrends = (turningPoints: Point[], minTouches = 3): Trend[] => {
+const findValidTrends = (
+  turningPoints: Point[],
+  minTouches = 3,
+  angleTolerance = 0.3// Maximum allowable slope deviation
+): Trend[] => {
   if (turningPoints.length < 2) return [];
 
+  const trends: Trend[] = [];
   let currentTrend: Point[] = [];
-  let trends: Trend[] = [];
-
-  // Determine initial trend direction
-  let direction: "up" | "down" =
-    turningPoints[1].y > turningPoints[0].y ? "up" : "down";
+  let initialSlope: number | null = null;
 
   for (let i = 0; i < turningPoints.length; i++) {
-    const point = turningPoints[i];
+    const currentPoint = turningPoints[i];
     const lastPoint = currentTrend[currentTrend.length - 1];
 
     if (!lastPoint) {
-      currentTrend.push(point);
+      // Start a new trend with the first point
+      currentTrend.push(currentPoint);
       continue;
     }
 
-    // Check if the trend should continue or switch direction
-    const isContinuing =
-      (direction === "up" && point.y > lastPoint.y && point.type === "low") ||
-      (direction === "down" && point.y < lastPoint.y && point.type === "high");
+    // Calculate the slope between the first point in the trend and the current point
+    const newSlope =
+      (currentPoint.y - currentTrend[0].y) /
+      (currentPoint.x - currentTrend[0].x);
 
-    if (isContinuing) {
-      currentTrend.push(point);
-    } else {
-      // Save the current trend if it has enough touches, then reset
+    if (initialSlope === null) {
+      // Set the initial slope for the trend
+      initialSlope = newSlope;
+      currentTrend.push(currentPoint);
+      continue;
+    }
+
+    // Check for slope deviation
+    const slopeDeviation = Math.abs(newSlope - initialSlope);
+    if (slopeDeviation > angleTolerance) {
+      // If deviation exceeds tolerance, finalize the current trend
       if (currentTrend.length >= minTouches) {
-        trends.push({ direction, points: [...currentTrend] });
+        trends.push({
+          direction: initialSlope > 0 ? "up" : "down",
+          points: [...currentTrend],
+        });
       }
-      // Reset trend with last point and current point, and switch direction
-      currentTrend = [lastPoint, point];
-      direction = point.y > lastPoint.y ? "up" : "down";
+
+      // Start a new trend with the last and current points
+      currentTrend = [lastPoint, currentPoint];
+      initialSlope = null;
+    } else {
+      // Add the current point to the trend
+      currentTrend.push(currentPoint);
     }
   }
 
-  // Add any remaining trend that meets the touch requirement
+  // Finalize any remaining trend
   if (currentTrend.length >= minTouches) {
-    trends.push({ direction, points: currentTrend });
+    trends.push({
+      direction: initialSlope && initialSlope > 0 ? "up" : "down",
+      points: currentTrend,
+    });
   }
 
   return trends;
@@ -85,8 +104,7 @@ const calculateTrendLine = (
   point1: Point,
   point2: Point,
   data: OHLCData[],
-  direction: "up" | "down",
-  tolerance = 0.5
+  nextTrendStartX: number | null = null,
 ): TrendLine | null => {
   if (!point1 || !point2) return null;
 
@@ -98,33 +116,15 @@ const calculateTrendLine = (
   const slope = (y2 - y1) / (x2 - x1);
   const intercept = y1 - slope * x1;
 
-  // TODO: THis needs work
   let endX = x2;
   let endY = y2;
 
   for (let i = x2 + 1; i < data.length; i++) {
-    const bar = data[i];
+    if (nextTrendStartX !== null && i >= nextTrendStartX) {
+      // Stop if we reach the next trend's starting x value
+      break;
+    }
     const trendY = slope * i + intercept;
-
-    // Check if the trend should stop based on the trend direction
-    if (
-      (direction === "up" && trendY < bar.low) || // Uptrend stops if below the low
-      (direction === "down" && trendY > bar.high) // Downtrend stops if above the high
-    ) {
-      break;
-    }
-
-    // Check for a "gap": stop if no bar's range intersects the trendline within tolerance
-    const intersectsTrend =
-      Math.abs(trendY - bar.low) <= tolerance ||
-      Math.abs(trendY - bar.high) <= tolerance ||
-      (trendY >= bar.low && trendY <= bar.high); // Ensure trendY is within bar's range
-
-    if (!intersectsTrend) {
-      break;
-    }
-
-    // Update the end point if the trend continues to intersect
     endX = i;
     endY = trendY;
   }
@@ -134,20 +134,23 @@ const calculateTrendLine = (
 
 // Main function to calculate trend lines with three-touch rule
 const calculateThreePointTrendLines = (data: OHLCData[]): TrendLine[] => {
-  const turningPoints = findSequentialTurningPoints(data, 3);
-
+  const turningPoints = findSequentialTurningPoints(data, 4);
+  console.log('turningPoints', turningPoints);
   const validTrends = findValidTrends(turningPoints, 3);
 
   return validTrends
     .filter((trend) => trend.points.length >= 3)
-    .map((trend) =>
-      calculateTrendLine(
+    .map((trend, index) => {
+      const nextTrend = validTrends[index + 1];
+      const nextTrendStartX = nextTrend ? nextTrend.points[0].x : null;
+
+      return calculateTrendLine(
         trend.points[0],
         trend.points[trend.points.length - 1],
         data,
-        trend.direction // Pass the direction to handle up/down trends
-      )
-    )
+        nextTrendStartX
+      );
+    })
     .filter(Boolean) as TrendLine[];
 };
 

@@ -55,7 +55,7 @@ const CandlestickChart: React.FC<ChartProps> = ({ tickData = [] }) => {
   const onMouseLeave = () => setMouseCoords({ x: 0, y: 0 });
 
   const onMouseMoveInside = (
-    e: React.MouseEvent<SVGSVGElement, MouseEvent>,
+    e: React.MouseEvent<SVGSVGElement, MouseEvent>
   ) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setMouseCoords({
@@ -63,6 +63,15 @@ const CandlestickChart: React.FC<ChartProps> = ({ tickData = [] }) => {
       y: e.clientY - rect.top,
     });
   };
+
+  // Generate y-axis ticks
+  const yTicks = useMemo(() => {
+    const scale = d3
+      .scaleLinear()
+      .domain([priceMin, priceMax])
+      .range([chartDims.pixelHeight, 0]);
+    return scale.ticks(10); // 10 tick marks for the y-axis
+  }, [priceMin, priceMax, chartDims.pixelHeight]);
 
   return (
     <svg
@@ -73,6 +82,22 @@ const CandlestickChart: React.FC<ChartProps> = ({ tickData = [] }) => {
       onClick={() => console.log(`Click at ${mouseCoords.x}, ${mouseCoords.y}`)}
       onMouseLeave={onMouseLeave}
     >
+      {/* Render Y-Axis Labels */}
+      {yTicks.map((tick, index) => (
+        <g key={`y-tick-${index}`} transform={`translate(0, ${pixelFor(tick)})`}>
+          <line
+            x1={40} // Reserve space for labels
+            x2={dimensions.width}
+            stroke="gray"
+            strokeWidth="0.5"
+            strokeDasharray="4 4"
+          />
+          <text x="30" y="5" fill="white" fontSize="10" textAnchor="end">
+            {tick}
+          </text>
+        </g>
+      ))}
+
       {/* Render Candles */}
       {data.map((bar, i) => {
         const candleX = i * (candleWidth + gap);
