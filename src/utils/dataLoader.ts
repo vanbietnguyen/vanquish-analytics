@@ -1,34 +1,15 @@
 import fs from "fs";
 import path from "path";
 import { tableFromIPC } from "apache-arrow";
-import { parseCustomTimestamp } from "~/utils/parseCustomTimestamp";
 import type TickData from "~/types/TickData.type";
-
-/**
- * Generates an array of dates between the given start and end dates.
- *
- * @param startDate - The start date.
- * @param endDate - The end date.
- * @returns An array of dates.
- */
-const generateDateArray = (startDate: string, endDate: string): Date[] => {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const dateArray: Date[] = [];
-
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    dateArray.push(new Date(d));
-  }
-
-  return dateArray;
-};
+import { generateDateArray } from "~/utils/generateDateArray";
 
 const processInChunks = async (
   totalRows: number, // Number of rows to process
   chunkSize: number,
   processRow: (index: number) => TickData | void, // Async function to process each row
 ) => {
-  const promises= [];
+  const promises = [];
 
   for (let i = 0; i < totalRows; i++) {
     // Push the current row's processing to the promises array
@@ -42,19 +23,14 @@ const processInChunks = async (
   }
 };
 
-
 /**
  * Processes a single Arrow file and filters data within the specified date range.
  *
  * @param filePath - Path to the Arrow file.
- * @param start - Start date for filtering.
- * @param end - End date for filtering.
  * @returns A promise that resolves to an array of filtered rows.
  */
 const processArrowFile = async (
   filePath: string,
-  start: Date,
-  end: Date
 ): Promise<TickData[]> => {
   if (!fs.existsSync(filePath)) {
     console.warn(`File not found: ${filePath}`);
@@ -69,14 +45,11 @@ const processArrowFile = async (
   const getRow = (index: number): void => {
     const row = table.get(index) as TickData | null;
     if (row) {
-      const rowDate = parseCustomTimestamp(row.timestamp);
-      if (rowDate >= start && rowDate <= end) {
-        filteredData.push(row);
-      }
+      filteredData.push(row);
     }
-  }
+  };
 
-  await processInChunks(maxLength, 10, getRow)
+  await processInChunks(maxLength, 10, getRow);
 
   return filteredData;
 };
@@ -92,7 +65,7 @@ const processArrowFile = async (
 const loadDataByDateRange = async (
   folderPath: string,
   startDate: string,
-  endDate: string
+  endDate: string,
 ): Promise<TickData[]> => {
   const dateArray = generateDateArray(startDate, endDate);
 
@@ -101,21 +74,26 @@ const loadDataByDateRange = async (
     const year = d.getFullYear().toString();
     const month = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
-    return path.join(folderPath, year, month, `tickdata_${year}-${month}-${day}.arrow`);
+    return path.join(
+      folderPath,
+      year,
+      month,
+      `tickdata_${year}-${month}-${day}.arrow`,
+    );
   });
 
-  const filteredFilePaths = filePaths.filter((filePath) => fs.existsSync(filePath));
+  const filteredFilePaths = filePaths.filter((filePath) =>
+    fs.existsSync(filePath),
+  );
 
   // Process all files concurrently using Promise.all
-  const results = await Promise.all(
-    filteredFilePaths.map((filePath) => processArrowFile(filePath, new Date(startDate), new Date(endDate)))
-  );
+  const results = await Promise.all(filteredFilePaths.map(processArrowFile));
 
   // Flatten the results array
   const filteredData = results.flat();
 
   console.log(
-    `Total rows within date range ${startDate} to ${endDate}: ${filteredData.length}`
+    `Total rows within date range ${startDate} to ${endDate}: ${filteredData.length}`,
   );
   return filteredData;
 };

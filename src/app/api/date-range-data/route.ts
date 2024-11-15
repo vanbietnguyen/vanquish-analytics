@@ -7,12 +7,14 @@ export async function GET(request: Request) {
   const endDate = searchParams.get("endDate") ?? '';
   const folderPath = searchParams.get("folderPath") ?? '';
 
-  if (!folderPath && !startDate && !endDate) {
+  if (!folderPath && !startDate) {
     return NextResponse.json({ error: "missing params" }, { status: 400 });
   }
 
+  const endDateToLoad = endDate ?? startDate;
+
   try {
-    const data = await loadDataByDateRange(folderPath, startDate, endDate);
+    const data = await loadDataByDateRange(folderPath, startDate, endDateToLoad);
 
     return NextResponse.json({ data });
   } catch (error) {
