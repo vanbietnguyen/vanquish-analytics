@@ -81,7 +81,13 @@ const findValidTrends = (turningPoints: Point[], minTouches = 3): Trend[] => {
 };
 
 // Calculate trend line based on the first and last points of a trend
-const calculateTrendLine = (point1: Point, point2: Point): TrendLine | null => {
+const calculateTrendLine = (
+  point1: Point,
+  point2: Point,
+  data: OHLCData[],
+  direction: "up" | "down",
+  tolerance = 0.5
+): TrendLine | null => {
   if (!point1 || !point2) return null;
 
   const { x: x1, y: y1 } = point1;
@@ -92,7 +98,38 @@ const calculateTrendLine = (point1: Point, point2: Point): TrendLine | null => {
   const slope = (y2 - y1) / (x2 - x1);
   const intercept = y1 - slope * x1;
 
-  return { slope, intercept, points: [point1, point2] };
+  // TODO: THis needs work
+  let endX = x2;
+  let endY = y2;
+
+  for (let i = x2 + 1; i < data.length; i++) {
+    const bar = data[i];
+    const trendY = slope * i + intercept;
+
+    // Check if the trend should stop based on the trend direction
+    if (
+      (direction === "up" && trendY < bar.low) || // Uptrend stops if below the low
+      (direction === "down" && trendY > bar.high) // Downtrend stops if above the high
+    ) {
+      break;
+    }
+
+    // Check for a "gap": stop if no bar's range intersects the trendline within tolerance
+    const intersectsTrend =
+      Math.abs(trendY - bar.low) <= tolerance ||
+      Math.abs(trendY - bar.high) <= tolerance ||
+      (trendY >= bar.low && trendY <= bar.high); // Ensure trendY is within bar's range
+
+    if (!intersectsTrend) {
+      break;
+    }
+
+    // Update the end point if the trend continues to intersect
+    endX = i;
+    endY = trendY;
+  }
+
+  return { slope, intercept, points: [point1, { x: endX, y: endY }] };
 };
 
 // Main function to calculate trend lines with three-touch rule
@@ -102,9 +139,14 @@ const calculateThreePointTrendLines = (data: OHLCData[]): TrendLine[] => {
   const validTrends = findValidTrends(turningPoints, 3);
 
   return validTrends
-    .filter((trend) => trend.points.length >= 3) // Ensure at least 3 points
+    .filter((trend) => trend.points.length >= 3)
     .map((trend) =>
-      calculateTrendLine(trend.points[0], trend.points[trend.points.length - 1])
+      calculateTrendLine(
+        trend.points[0],
+        trend.points[trend.points.length - 1],
+        data,
+        trend.direction // Pass the direction to handle up/down trends
+      )
     )
     .filter(Boolean) as TrendLine[];
 };

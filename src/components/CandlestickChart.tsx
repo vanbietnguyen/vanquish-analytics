@@ -15,7 +15,6 @@ const CandlestickChart: React.FC<ChartProps> = ({ tickData = [] }) => {
   const dimensions = useWindowDimensions();
   const data = useMemo(() => aggregateTicksToOHLC(tickData, 2000), [tickData]);
 
-
   const trendLines = useMemo(() => calculateThreePointTrendLines(data), [data]);
 
   console.log('trendLines', trendLines);
@@ -102,6 +101,7 @@ const CandlestickChart: React.FC<ChartProps> = ({ tickData = [] }) => {
             y2={pixelFor(end.y)}
             stroke={line.direction === "up" ? "green" : "red"}
             strokeWidth="2"
+            strokeDasharray={line.direction === "down" ? "4 4" : undefined} // Dotted for downtrend (optional)
           />
         );
       })}
