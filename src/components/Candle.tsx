@@ -13,7 +13,7 @@ type CandleProps = {
   pixelFor: (value: number) => number;
 };
 
-const Candle: React.FC<CandleProps> = ({ data, x, candle_width, pixelFor }) => {
+const Candle: React.FC<CandleProps> = React.memo(({ data, x, candle_width, pixelFor }) => {
   const up = data.close > data.open;
 
   // Calculate bar and wick positions
@@ -60,6 +60,7 @@ const Candle: React.FC<CandleProps> = ({ data, x, candle_width, pixelFor }) => {
       />
     </>
   );
-};
+});
 
+Candle.displayName = 'Candle';
 export default Candle;
