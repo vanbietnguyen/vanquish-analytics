@@ -1,13 +1,5 @@
 import type TickData from "~/types/TickData.type";
-
-type OHLCData = {
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  timestamp: string;
-  volume: number;
-};
+import { type OHLCData } from "~/types";
 
 // Function to chunk and aggregate tick data into OHLC format
 const aggregateTicksToOHLC = (data: TickData[], chunkSize = 2000): OHLCData[] => {

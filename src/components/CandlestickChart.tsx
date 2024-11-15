@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import * as d3 from "d3";
 import Candle from "./Candle";
 import CrossHairs from "~/components/CrossHairs";
 import { useWindowDimensions } from "~/hooks/useWindowDimensions";
 import aggregateTicksToOHLC from "~/utils/aggregateTicksToOHLC";
-// import { dollarAt } from "~/utils/chartUtils";
+import calculateThreePointTrendLines from "~/utils/calculateThreePointTrendLines";
 import type TickData from "~/types/TickData.type";
 
 type ChartProps = {
@@ -12,20 +12,21 @@ type ChartProps = {
 };
 
 const CandlestickChart: React.FC<ChartProps> = ({ tickData = [] }) => {
-  console.log("data.length", tickData.length);
   const dimensions = useWindowDimensions();
-  const data = aggregateTicksToOHLC(tickData, 2000);
+  const data = useMemo(() => aggregateTicksToOHLC(tickData, 2000), [tickData]);
+
+
+  const trendLines = useMemo(() => calculateThreePointTrendLines(data), [data]);
+
+  console.log('trendLines', trendLines);
 
   const [mouseCoords, setMouseCoords] = useState({ x: 0, y: 0 });
-
-  // Set the candle width and gap between each bar
-  const gap = 2; // Adjust this value to control spacing between bars
+  const gap = 2;
   const candleWidth = Math.max(
     1,
     Math.floor((dimensions.width - gap * (data.length - 1)) / data.length),
   );
 
-  // Calculate min and max price with padding of 10 units
   const priceMax = Math.ceil(d3.max(data.map((bar) => bar.high))! + 10);
   const priceMin = Math.floor(d3.min(data.map((bar) => bar.low))! - 10);
 
@@ -37,7 +38,6 @@ const CandlestickChart: React.FC<ChartProps> = ({ tickData = [] }) => {
     dollarDelta: priceMax - priceMin,
   };
 
-  // Map price values to pixel values based on chart height
   const pixelFor = (price: number) => {
     return (
       ((price - chartDims.dollarLow) / chartDims.dollarDelta) *
@@ -48,7 +48,7 @@ const CandlestickChart: React.FC<ChartProps> = ({ tickData = [] }) => {
   const dollarAt = (pixel: number) => {
     const dollar =
       ((chartDims.pixelHeight - pixel) / chartDims.pixelHeight) *
-        chartDims.dollarDelta +
+      chartDims.dollarDelta +
       chartDims.dollarLow;
     return pixel > 0 ? dollar.toFixed(2) : "-";
   };
@@ -74,8 +74,9 @@ const CandlestickChart: React.FC<ChartProps> = ({ tickData = [] }) => {
       onClick={() => console.log(`Click at ${mouseCoords.x}, ${mouseCoords.y}`)}
       onMouseLeave={onMouseLeave}
     >
+      {/* Render Candles */}
       {data.map((bar, i) => {
-        const candleX = i * (candleWidth + gap); // Adjust candle position with fixed gap
+        const candleX = i * (candleWidth + gap);
         return (
           <Candle
             key={i}
@@ -86,6 +87,29 @@ const CandlestickChart: React.FC<ChartProps> = ({ tickData = [] }) => {
           />
         );
       })}
+
+      {/* Render Trendlines */}
+      {trendLines.map((line, index) => {
+        const start = line.points[0];
+        const end = line.points[line.points.length - 1];
+
+        return (
+          <line
+            key={`trendline-${index}`}
+            x1={start.x * (candleWidth + gap)}
+            y1={pixelFor(start.y)}
+            x2={end.x * (candleWidth + gap)}
+            y2={pixelFor(end.y)}
+            stroke={line.direction === "up" ? "green" : "red"}
+            strokeWidth="2"
+          />
+        );
+      })}
+
+      {/* Display CrossHairs */}
+      <CrossHairs x={mouseCoords.x} y={mouseCoords.y} chart_dims={chartDims} />
+
+      {/* Display Mouse Coordinates */}
       <text x="10" y="16" fill="white" fontSize="10">
         <tspan>
           Mouse: {mouseCoords.x}, {mouseCoords.y}
@@ -94,7 +118,6 @@ const CandlestickChart: React.FC<ChartProps> = ({ tickData = [] }) => {
           Dollars: ${dollarAt(mouseCoords.y)}
         </tspan>
       </text>
-      <CrossHairs x={mouseCoords.x} y={mouseCoords.y} chart_dims={chartDims} />
     </svg>
   );
 };
