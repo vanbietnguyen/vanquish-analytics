@@ -1,4 +1,4 @@
-import { api, HydrateClient } from "~/trpc/server";
+import {HydrateClient} from "~/trpc/server";
 // import ChartWithDatePicker from "~/components/ChartWithDatePicker";
 import SimulatedChart from "~/components/SimulatedChart";
 
