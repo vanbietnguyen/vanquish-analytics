@@ -1,4 +1,4 @@
-import { type OHLCData, type Point, type Trend, type TrendLine } from "~/types";
+import {type OHLCData, type Point, type Trend, type TrendLine} from "~/types";
 
 // Function to capture turning points with both high and low values, including engulfing bars
 const findSequentialTurningPoints = (
@@ -131,8 +131,7 @@ const calculateTrendLine = (
 };
 
 // Main function to calculate trend lines with three-touch rule
-const calculateThreePointTrendLines = (data: OHLCData[], windowSize = 2, angleTolerance = 0.1): TrendLine[] => {
-  const turningPoints = findSequentialTurningPoints(data, windowSize);
+const calculateThreePointTrendLines = (turningPoints: Point[], data: OHLCData[], angleTolerance = 0.1): TrendLine[] => {
   const validTrends = findValidTrends(turningPoints, 3, angleTolerance);
 
   return validTrends

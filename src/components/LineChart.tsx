@@ -40,7 +40,7 @@ const LineChart = ({ data }: ChartProps) => {
     // Create line generator
     const line = d3
       .line<TickData>()
-      .x((d) => x(parseCustomTimestamp(d.timestamp))!)
+      .x((d) => x(parseCustomTimestamp(d.timestamp)))
       .y((d) => y(d.close))
       .curve(d3.curveMonotoneX);
 

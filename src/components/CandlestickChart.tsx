@@ -1,38 +1,38 @@
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import React, {useEffect, useMemo, useRef, useState} from "react";
 import * as d3 from "d3";
-import Candle from "./Candle";
-import CrossHairs from "~/components/CrossHairs";
-import { useWindowDimensions } from "~/hooks/useWindowDimensions";
-// import aggregateTicksToOHLC from "~/utils/aggregateTicksToOHLC";
-import { calculateTrend } from "~/utils/calculateThreePointTrendLines";
-import { useVirtualizer } from "@tanstack/react-virtual";
-// import type TickData from "~/types/TickData.type";
-import useDebouncedCallback from "~/hooks/useDebounceCallback";
-import { OHLCData, Trend, TrendLine } from "~/types";
+import {useVirtualizer} from "@tanstack/react-virtual";
+import {useWindowDimensions} from "~/hooks/useWindowDimensions";
+import {type OHLCData, type Point, type Trend} from "~/types";
 
 type ChartProps = {
   data?: OHLCData[];
   trendLines?: Trend[];
   defaultMax?: number;
   defaultMin?: number;
+  turningPoints?: Point[];
 };
 
-const CandlestickChart: React.FC<ChartProps> = ({ data = [], defaultMax, defaultMin, trendLines = []}) => {
+const CandlestickChart: React.FC<ChartProps> = ({
+  data = [],
+  trendLines = [],
+  turningPoints = [],
+  defaultMax,
+  defaultMin,
+}) => {
   const dimensions = useWindowDimensions();
-
   const [mouseCoords, setMouseCoords] = useState({ x: 0, y: 0 });
 
-  const handleMouseCords = useDebouncedCallback(setMouseCoords, .5);
-
   const containerRef = useRef<HTMLDivElement>(null);
-  const gap = 2;
-  const candleWidth = 1;
+  const svgRef = useRef<SVGSVGElement>(null);
 
-  const priceMax = defaultMax ?? Math.ceil(d3.max(data.map((bar) => bar.high))! + 10) ;
+  const candleWidth = 6;
+  const gap = 2;
+
+  const priceMax = defaultMax ?? Math.ceil(d3.max(data.map((bar) => bar.high))! + 10);
   const priceMin = defaultMin ?? Math.floor(d3.min(data.map((bar) => bar.low))! - 10);
 
   const chartDims = {
-    pixelWidth: dimensions.width,
+    pixelWidth: dimensions.width - 50, // Subtract Y-axis width
     pixelHeight: dimensions.height,
     dollarHigh: priceMax,
     dollarLow: priceMin,
@@ -54,166 +54,185 @@ const CandlestickChart: React.FC<ChartProps> = ({ data = [], defaultMax, default
     return pixel > 0 ? dollar.toFixed(2) : "-";
   };
 
-  const [, setScrollPosition] = useState(0);
-
-  // Define the debounced scroll handler
-  const handleScroll = useDebouncedCallback(() => {
-    if (containerRef.current) {
-      setScrollPosition(containerRef.current.scrollLeft);
-    }
-  }, 100); // Debounce delay of 200ms
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    // Attach the scroll listener
-    container.addEventListener("scroll", handleScroll);
-
-    // Cleanup the listener on unmount
-    return () => {
-      container.removeEventListener("scroll", handleScroll);
-    };
-  }, [handleScroll]);
+  const yTicks = useMemo(() => {
+    const scale = d3
+      .scaleLinear()
+      .domain([priceMin, priceMax])
+      .range([chartDims.pixelHeight, 0]);
+    return scale.ticks(10);
+  }, [priceMin, priceMax, chartDims.pixelHeight]);
 
   const rowVirtualizer = useVirtualizer({
     count: data.length,
     getScrollElement: () => containerRef.current,
     estimateSize: () => candleWidth + gap,
     horizontal: true,
-    overscan: 500, // Render 5 extra items on each side
+    overscan: 50,
   });
-  const onMouseLeave = () => handleMouseCords({ x: 0, y: 0 });
 
-  const onMouseMoveInside = (
-    e: React.MouseEvent<SVGSVGElement, MouseEvent>
-  ) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    handleMouseCords({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
+  useEffect(() => {
+    const visibleData = rowVirtualizer.getVirtualItems().map((virtualItem) => ({
+      ...data[virtualItem.index],
+      x: virtualItem.start,
+    }));
+
+    const svg = d3.select(svgRef.current);
+
+    // Clear previous renderings
+    svg.selectAll("*").remove();
+
+    // Render Y-Axis Ticks
+    svg
+      .selectAll(".y-tick")
+      .data(yTicks)
+      .join("text")
+      .attr("class", "y-tick")
+      .attr("x", 30)
+      .attr("y", (d) => pixelFor(d))
+      .attr("fill", "white")
+      .attr("font-size", 10)
+      .attr("text-anchor", "end")
+      .text((d) => d);
+
+    // Render Candlesticks
+    svg
+      .selectAll(".candle")
+      .data(visibleData)
+      .join("g")
+      .attr("class", "candle")
+      .each(function (d) {
+        const group = d3.select(this);
+
+        const x = d.x;
+        const up = d.close > d.open;
+
+        const barTop = pixelFor(up ? d.close : d.open);
+        const barBottom = pixelFor(up ? d.open : d.close);
+        const barHeight = Math.abs(barBottom - barTop);
+
+        const wickTop = pixelFor(d.high);
+        const wickBottom = pixelFor(d.low);
+
+        group
+          .append("rect")
+          .attr("x", x - candleWidth / 2)
+          .attr("y", Math.min(barTop, barBottom))
+          .attr("width", candleWidth)
+          .attr("height", barHeight)
+          .attr("fill", up ? "#00ff00" : "#ff0000")
+          .attr("stroke", up ? "#008000" : "#800000")
+          .attr("stroke-width", 1);
+
+        group
+          .append("line")
+          .attr("x1", x)
+          .attr("y1", barTop)
+          .attr("x2", x)
+          .attr("y2", wickTop)
+          .attr("stroke", up ? "#008000" : "#800000")
+          .attr("stroke-width", 1);
+
+        group
+          .append("line")
+          .attr("x1", x)
+          .attr("y1", barBottom)
+          .attr("x2", x)
+          .attr("y2", wickBottom)
+          .attr("stroke", up ? "#008000" : "#800000")
+          .attr("stroke-width", 1);
+      });
+
+    // Render Turning Points
+    svg
+      .selectAll(".turning-point")
+      .data(turningPoints)
+      .join("circle")
+      .attr("class", "turning-point")
+      .attr("cx", (d) => d.x * (candleWidth + gap))
+      .attr("cy", (d) => pixelFor(d.y))
+      .attr("r", 5)
+      .attr("fill", (d) => (d.type === "high" ? "blue" : "orange"))
+      .attr("stroke", "white")
+      .attr("stroke-width", 1);
+
+    // Render Trend Lines
+    svg
+      .selectAll(".trend-line")
+      .data(trendLines)
+      .join("line")
+      .attr("class", "trend-line")
+      .attr("x1", (d) => d.points[0].x * (candleWidth + gap))
+      .attr("y1", (d) => pixelFor(d.points[0].y))
+      .attr("x2", (d) => d.points[d.points.length - 1].x * (candleWidth + gap))
+      .attr("y2", (d) => pixelFor(d.points[d.points.length - 1].y))
+      .attr("stroke", (d) => (d.direction === "up" ? "green" : "red"))
+      .attr("stroke-width", 2)
+      .attr("stroke-dasharray", (d) => (d.direction === "down" ? "4 4" : null));
+
+    // Initialize crosshair elements
+    const horizontalLine = svg.append("line").attr("class", "crosshair-line");
+    const verticalLine = svg.append("line").attr("class", "crosshair-line");
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const rect = svgRef.current!.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      // Update crosshairs
+      horizontalLine
+        .attr("x1", 0)
+        .attr("y1", y)
+        .attr("x2", chartDims.pixelWidth)
+        .attr("y2", y)
+        .attr("stroke", "white")
+        .attr("stroke-width", 1)
+        .attr("stroke-dasharray", "4 4")
+        .attr("opacity", 0.7);
+
+      verticalLine
+        .attr("x1", x)
+        .attr("y1", 0)
+        .attr("x2", x)
+        .attr("y2", chartDims.pixelHeight)
+        .attr("stroke", "white")
+        .attr("stroke-width", 1)
+        .attr("stroke-dasharray", "4 4")
+        .attr("opacity", 0.7);
+
+      // Update React state for info box
+      setMouseCoords({ x, y });
+    };
+
+    svg.on("mousemove", handleMouseMove);
+    svg.on("mouseleave", () => {
+      horizontalLine.attr("opacity", 0);
+      verticalLine.attr("opacity", 0);
+      setMouseCoords({ x: 0, y: 0 });
     });
-  };
-
-  // Generate y-axis ticks
-  const yTicks = useMemo(() => {
-    const scale = d3
-      .scaleLinear()
-      .domain([priceMin, priceMax])
-      .range([chartDims.pixelHeight, 0]);
-    return scale.ticks(10); // 10 tick marks for the y-axis
-  }, [priceMin, priceMax, chartDims.pixelHeight]);
+  }, [rowVirtualizer.getVirtualItems(), turningPoints, trendLines, chartDims, yTicks]);
 
   return (
     <div
-      className="bg-chart-bg"
+      ref={containerRef}
+      className="bg-gray-900" // Tailwind class for dark background
       style={{
         width: dimensions.width,
         height: dimensions.height,
-        display: "flex", // Use flexbox to align the Y-axis and chart
+        overflowX: "auto",
         position: "relative",
       }}
     >
-      {/* Y-Axis Container */}
       <svg
-        width={50} // Fixed width for Y-axis labels
+        ref={svgRef}
+        className="bg-gray-800" // Tailwind class for the chart background
+        width={rowVirtualizer.getTotalSize()}
         height={chartDims.pixelHeight}
-        className="bg-chart-bg text-white"
-        style={{
-          position: "absolute",
-          left: 0,
-          top: 0,
-          zIndex: 1,
-        }}
-      >
-        {yTicks.map((tick, index) => (
-          <text
-            key={`y-tick-${index}`}
-            x={30} // Position the text within the Y-axis container
-            y={pixelFor(tick)}
-            fill="white"
-            fontSize="10"
-            textAnchor="end"
-          >
-            {tick}
-          </text>
-        ))}
-      </svg>
-
-      {/* Chart Container */}
+      />
       <div
-        ref={containerRef}
-        style={{
-          width: dimensions.width - 50, // Subtract Y-axis width
-          height: dimensions.height,
-          overflowX: "auto",
-          overflowY: "hidden",
-          position: "relative",
-          marginLeft: 50, // Offset to align with Y-axis
-        }}
+        className="absolute top-2 left-2 text-white text-sm"
       >
-        <svg
-          width={rowVirtualizer.getTotalSize()}
-          height={chartDims.pixelHeight}
-          className="bg-chart-bg text-white"
-          onMouseMove={onMouseMoveInside}
-          onClick={() =>
-            console.log(`Click at ${mouseCoords.x}, ${mouseCoords.y}`)
-          }
-          onMouseLeave={onMouseLeave}
-        >
-          {/* Render Virtualized Candles */}
-          {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-            const bar = data[virtualItem.index];
-            const candleX = virtualItem.start;
-
-            return (
-              <Candle
-                key={virtualItem.index}
-                data={bar}
-                x={candleX}
-                candle_width={candleWidth}
-                pixelFor={pixelFor}
-              />
-            );
-          })}
-
-          {/* Render Trendlines */}
-          {trendLines.map((line, index) => {
-            const start = line.points[0];
-            const end = line.points[line.points.length - 1];
-
-            return (
-              <line
-                key={`trendline-${index}`}
-                x1={start.x * (candleWidth + gap)}
-                y1={pixelFor(start.y)}
-                x2={end.x * (candleWidth + gap)}
-                y2={pixelFor(end.y)}
-                stroke={line.direction === "up" ? "green" : "red"}
-                strokeWidth="2"
-                strokeDasharray={line.direction === "down" ? "4 4" : undefined}
-              />
-            );
-          })}
-
-          {/* Display CrossHairs */}
-          <CrossHairs
-            x={mouseCoords.x}
-            y={mouseCoords.y}
-            chart_dims={chartDims}
-          />
-
-          {/* Display Mouse Coordinates */}
-          <text x="10" y="16" fill="white" fontSize="10">
-            <tspan>
-              Mouse: {mouseCoords.x}, {mouseCoords.y}
-            </tspan>
-            <tspan x="10" y="30">
-              Dollars: ${dollarAt(mouseCoords.y)}
-            </tspan>
-          </text>
-        </svg>
+        <p>Mouse: {mouseCoords.x}, {mouseCoords.y}</p>
+        <p>Dollars: ${dollarAt(mouseCoords.y)}</p>
       </div>
     </div>
   );

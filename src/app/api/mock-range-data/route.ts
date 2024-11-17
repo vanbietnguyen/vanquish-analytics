@@ -6,7 +6,7 @@ import type TickData from "~/types/TickData.type";
 
 export async function GET() {
   const filePath = path.join('src/data', '2024', '08', `tickdata_2024-08-01.arrow`);
-  let data = [];
+  const data = [];
 
   if (fs.existsSync(filePath)) {
     console.log('we ar ereading table now')

@@ -1,17 +1,18 @@
 'use client';
-import React, { useEffect, useMemo, useState, useRef } from "react";
-import { Button } from "~/components/ui/button";
-import { Slider } from "~/components/ui/slider";
+import React, {useEffect, useMemo, useRef, useState} from "react";
+import {Button} from "~/components/ui/button";
+import {Slider} from "~/components/ui/slider";
 import CandlestickChart from "~/components/CandlestickChart";
 import useSimulatedLiveData from "~/hooks/useSimulateLiveData";
 import useMockData from "~/hooks/useMockData";
 import aggregateTicksToOHLC from "~/utils/aggregateTicksToOHLC";
-import { calculateTrend } from "~/utils/calculateThreePointTrendLines";
+import {calculateTrend, findSequentialTurningPoints} from "~/utils/calculateThreePointTrendLines";
 import * as d3 from "d3";
-import {Trend, TrendLine} from "~/types";
+import {type Trend, type TrendLine} from "~/types";
 
 const SimulatedChart = () => {
   const [ticksPerInterval, setTicksPerInterval] = useState(200);
+  const [turningPoints, setTurningPoints] = useState([])
   const [trendLines, setTrendLines] = useState<TrendLine[]>([]);
   const primaryTrend = useRef<TrendLine | null>(null);
   const lastProcessedIndex = useRef(0)
@@ -36,39 +37,58 @@ const SimulatedChart = () => {
       [ogData],
   );
 
-  useEffect(() => {
-    if (data.length === 0) return;
-// TODO add a new attribute that is a boolean - if the data is either above or below depending on the trend direction
-    //  (above === uptrend, below ==== downtrend),
-    //  then we don't make any more trends in the same direction
-    // once it goes a certain amount of distance in the opposite direction, we switch the boolean
-    // then we close the trade and go in the opposite direction once a trend is identified
-    // same rule applies to the next trend
-    const newTrends = calculateTrend(data);
-    if (newTrends.length === 0) return; // Escape if no trends exist
-
-    // Initialize the primary trend if it doesn't exist
-    if (!primaryTrend.current) {
-      primaryTrend.current = newTrends[0] || null;
-      lastProcessedIndex.current = newTrends.length - 1; // Correct index initialization
-      setTrendLines(newTrends); // Set initial trend lines
-      return;
-    }
-
-    const primary = primaryTrend.current;
-    const primaryDirection = primary.slope > 0 ? 'up' : 'down';
-    // Process trends starting after the last processed index
+  const filterTrends = (newTrends) => {
+    if (!primaryTrend.current) return newTrends;
+    const primaryDirection = primaryTrend.current.slope > 0 ? "up" : "down";
     const filteredTrends: Trend[] = [];
     for (let i = (lastProcessedIndex.current || 0) + 1; i < newTrends.length; i++) {
       const trend = newTrends[i];
-      console.log('newTRend', trend);
-      console.log('primaryTrend', primaryTrend.current)
-      const currentTrendDirection = trend.slope > 0 ? 'up' : 'down';
+      const currentTrendDirection = trend.slope > 0 ? "up" : "down";
+
       // Skip trends in the same direction as the primary trend
       if (primaryDirection === currentTrendDirection) continue;
 
       filteredTrends.push(trend);
     }
+
+    return filteredTrends;
+  }
+
+  useEffect(() => {
+    if (data.length === 0) return;
+
+    // Calculate new trends
+    const newTurningPoints = findSequentialTurningPoints(data, 2);
+    setTurningPoints(newTurningPoints);
+    console.log('data', data)
+
+    const newTrends = calculateTrend(newTurningPoints, data);
+    console.log('newTrends', newTrends);
+    if (newTrends.length === 0) return; // Escape if no trends exist
+
+    // Initialize the primary trend if it doesn't exist
+    if (!primaryTrend.current) {
+      primaryTrend.current = newTrends.find(({ shouldExtend }) => shouldExtend);
+    }
+
+    if (newTrends.length === 1) {
+      setTrendLines(newTrends);
+      return;
+    }
+
+    const filteredTrends = filterTrends(newTrends);
+    console.log('filteredTrends', filteredTrends);
+    console.log('primary before', primaryTrend.current)
+
+    const primary = primaryTrend.current;
+    const threshold = 5; // Threshold for deviation
+
+
+    // Process trends starting after the last processed index
+
+    // Get the last price of the most recent candle
+    const lastCandle = data[data.length - 1];
+    const lastPrice = lastCandle.close;
 
     // Extend trends that have `shouldExtend` set to true
     const extendedTrends = trendLines.map((trend) => {
@@ -76,9 +96,22 @@ const SimulatedChart = () => {
 
       const newEndX = data.length - 1; // Extend to the current data length
       const newEndY = trend.slope * newEndX + trend.intercept; // Use original slope and intercept
+      const deviation = Math.abs(lastPrice - newEndY);
+      console.log('deviation', deviation)
+
+      // Stop extending if deviation exceeds threshold
+      let shouldExtend = deviation < threshold;
+
+      // If the primary trend stops extending, reset it
+      if (!shouldExtend && primary.points[0].x === trend.points[0].x) {
+        const newPrimaryTrend = newTrends.find(({ shouldExtend }) => shouldExtend);
+        primaryTrend.current = newPrimaryTrend || trend;
+        shouldExtend = Boolean(newPrimaryTrend) ?? true;
+      }
 
       return {
         ...trend,
+        shouldExtend,
         points: [
           ...trend.points,
           { x: newEndX, y: newEndY }, // Extend with the new endpoint
@@ -86,17 +119,22 @@ const SimulatedChart = () => {
       };
     });
 
-    // determine direction based on threshold. or some qualifier
+    console.log('extended', extendedTrends)
 
+    // Combine trends and update last processed index
     const updatedTrendLines = [...extendedTrends, ...filteredTrends];
+    console.log('updatedTRendlins', updatedTrendLines);
     lastProcessedIndex.current = updatedTrendLines.length - 1;
-    // Update trend lines by appending only new valid trends and extending existing ones
+    console.log('last porddesced', lastProcessedIndex.current);
+
+    // Update trend lines
     setTrendLines(updatedTrendLines);
 
-    // Update the last processed index
-
-    console.log("Primary Trend:", primaryTrend.current);
+    console.log("Primary Trend after:", primaryTrend.current);
+    console.log('>>>>>>>>>>>>>>>>>')
   }, [data]);
+
+
 
   return (
     <div>
@@ -119,6 +157,7 @@ const SimulatedChart = () => {
         defaultMax={priceMax}
         defaultMin={priceMin}
         trendLines={trendLines}
+        turningPoints={turningPoints}
       />
     </div>
   );
