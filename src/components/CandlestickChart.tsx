@@ -20,10 +20,16 @@ const CandlestickChart: React.FC<ChartProps> = ({
   defaultMin,
 }) => {
   const dimensions = useWindowDimensions();
+  const [tooltipData, setTooltipData] = useState<{ x: number; y: number; trend: Trend | null }>({
+    x: 0,
+    y: 0,
+    trend: null,
+  });
   const [mouseCoords, setMouseCoords] = useState({ x: 0, y: 0 });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
 
   const candleWidth = 6;
   const gap = 2;
@@ -69,6 +75,23 @@ const CandlestickChart: React.FC<ChartProps> = ({
     horizontal: true,
     overscan: 50,
   });
+
+  // Handle outside clicks
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (
+        tooltipRef.current &&
+        !tooltipRef.current.contains(event.target as Node)
+      ) {
+        setTooltipData({ x: 0, y: 0, trend: null });
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, []);
 
   useEffect(() => {
     const visibleData = rowVirtualizer.getVirtualItems().map((virtualItem) => ({
@@ -155,7 +178,7 @@ const CandlestickChart: React.FC<ChartProps> = ({
       .attr("stroke", "white")
       .attr("stroke-width", 1);
 
-    // Render Trend Lines
+    // Render Trend Lines with Tooltips
     svg
       .selectAll(".trend-line")
       .data(trendLines)
@@ -167,7 +190,19 @@ const CandlestickChart: React.FC<ChartProps> = ({
       .attr("y2", (d) => pixelFor(d.points[d.points.length - 1].y))
       .attr("stroke", (d) => (d.direction === "up" ? "green" : "red"))
       .attr("stroke-width", 2)
-      .attr("stroke-dasharray", (d) => (d.direction === "down" ? "4 4" : null));
+      .attr("stroke-dasharray", (d) => (d.direction === "down" ? "4 4" : null))
+      .style("cursor", "pointer")
+      .on("mouseover", (event, d) => {
+        const rect = svgRef.current!.getBoundingClientRect();
+        setTooltipData({
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+          trend: d,
+        });
+      })
+      .on("mouseleave", () => {
+        setTooltipData({ x: 0, y: 0, trend: null });
+      });
 
     // Initialize crosshair elements
     const horizontalLine = svg.append("line").attr("class", "crosshair-line");
@@ -214,23 +249,31 @@ const CandlestickChart: React.FC<ChartProps> = ({
   return (
     <div
       ref={containerRef}
-      className="bg-gray-900" // Tailwind class for dark background
-      style={{
-        width: dimensions.width,
-        height: dimensions.height,
-        overflowX: "auto",
-        position: "relative",
-      }}
+      className="bg-gray-900 relative overflow-x-auto"
+      style={{ width: dimensions.width, height: dimensions.height }}
     >
       <svg
         ref={svgRef}
-        className="bg-gray-800" // Tailwind class for the chart background
+        className="bg-gray-800"
         width={rowVirtualizer.getTotalSize()}
         height={chartDims.pixelHeight}
       />
-      <div
-        className="absolute top-2 left-2 text-white text-sm"
-      >
+      {tooltipData.trend && (
+        <div
+          ref={tooltipRef}
+          className="absolute bg-gray-700 text-white text-sm p-2 rounded shadow-lg z-50"
+          style={{
+            top: tooltipData.y + 10,
+            left: tooltipData.x + 10,
+          }}
+        >
+          <p><strong>Trend Details:</strong></p>
+          <p>Direction: {tooltipData.trend.direction}</p>
+          <p>Slope: {tooltipData.trend.slope?.toFixed(2)}</p>
+          <p>Touches: {tooltipData.trend.points.length}</p>
+        </div>
+      )}
+      <div className="absolute top-2 left-2 text-white text-sm">
         <p>Mouse: {mouseCoords.x}, {mouseCoords.y}</p>
         <p>Dollars: ${dollarAt(mouseCoords.y)}</p>
       </div>
