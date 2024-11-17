@@ -18,6 +18,7 @@ export type TrendLine = {
   intercept: number;
   direction: "up" | "down";
   points: Point[];
+  shouldExtend: boolean;
 };
 
 export type OHLCData = {

@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { Button } from "~/components/ui/button";
 import { Slider } from "~/components/ui/slider";
 import CandlestickChart from "~/components/CandlestickChart";
@@ -8,93 +8,94 @@ import useMockData from "~/hooks/useMockData";
 import aggregateTicksToOHLC from "~/utils/aggregateTicksToOHLC";
 import { calculateTrend } from "~/utils/calculateThreePointTrendLines";
 import * as d3 from "d3";
-import { Trend, Point } from "~/types";
+import {Trend, TrendLine} from "~/types";
 
 const SimulatedChart = () => {
   const [ticksPerInterval, setTicksPerInterval] = useState(200);
-  const [trendLines, setTrendLines] = useState<Trend[]>([]);
-  const folderPath = "src/parsers/data";
+  const [trendLines, setTrendLines] = useState<TrendLine[]>([]);
+  const primaryTrend = useRef<TrendLine | null>(null);
+  const lastProcessedIndex = useRef(0)
 
   const { data: tickData, isLoading, error } = useMockData();
-  const { liveData, start, stop, restart, isRunning } = useSimulatedLiveData(
-    tickData,
-    1000,
-    ticksPerInterval,
+  const { liveData, start, stop, restart } = useSimulatedLiveData(
+      tickData,
+      1000,
+      ticksPerInterval,
   );
 
   // Aggregate ticks into OHLC bars
   const ogData = useMemo(() => aggregateTicksToOHLC(tickData, 2000), [tickData]);
   const data = useMemo(() => aggregateTicksToOHLC(liveData, 2000), [liveData]);
 
-  // add min value
   const priceMax = useMemo(
-    () => Math.ceil(d3.max(ogData.map((bar) => bar.high))! + 10),
-    [ogData],
+      () => Math.ceil(d3.max(ogData.map((bar) => bar.high))! + 10),
+      [ogData],
   );
   const priceMin = useMemo(
-    () => Math.floor(d3.min(ogData.map((bar) => bar.low))! - 10),
-    [ogData],
+      () => Math.floor(d3.min(ogData.map((bar) => bar.low))! - 10),
+      [ogData],
   );
 
   useEffect(() => {
     if (data.length === 0) return;
-
-    // TODO add a new attribute that is a boolean - if the data is either above or below depending on the trend direction
+// TODO add a new attribute that is a boolean - if the data is either above or below depending on the trend direction
     //  (above === uptrend, below ==== downtrend),
     //  then we don't make any more trends in the same direction
     // once it goes a certain amount of distance in the opposite direction, we switch the boolean
     // then we close the trade and go in the opposite direction once a trend is identified
     // same rule applies to the next trend
     const newTrends = calculateTrend(data);
+    if (newTrends.length === 0) return; // Escape if no trends exist
 
-    setTrendLines((prevTrends) => {
-      const extendedTrends = prevTrends.map((prevTrend) => {
-        const lastPoint = prevTrend.points[prevTrend.points.length - 1];
-        const slope = (lastPoint.y - prevTrend.points[0].y) / (lastPoint.x - prevTrend.points[0].x);
+    // Initialize the primary trend if it doesn't exist
+    if (!primaryTrend.current) {
+      primaryTrend.current = newTrends[0] || null;
+      lastProcessedIndex.current = newTrends.length - 1; // Correct index initialization
+      setTrendLines(newTrends); // Set initial trend lines
+      return;
+    }
 
-        // Extend the trendline by projecting the slope
-        const nextX = Math.min(data.length - 1, lastPoint.x + 10); // Add a cushion of +10 bars
-        const nextY = lastPoint.y + slope * (nextX - lastPoint.x);
+    const primary = primaryTrend.current;
+    const primaryDirection = primary.slope > 0 ? 'up' : 'down';
+    // Process trends starting after the last processed index
+    const filteredTrends: Trend[] = [];
+    for (let i = (lastProcessedIndex.current || 0) + 1; i < newTrends.length; i++) {
+      const trend = newTrends[i];
+      console.log('newTRend', trend);
+      console.log('primaryTrend', primaryTrend.current)
+      const currentTrendDirection = trend.slope > 0 ? 'up' : 'down';
+      // Skip trends in the same direction as the primary trend
+      if (primaryDirection === currentTrendDirection) continue;
 
-        const overlappingTrend = newTrends.find((newTrend) => {
-          const newTrendStartX = newTrend.points[0].x;
-          return newTrendStartX >= lastPoint.x && newTrendStartX <= nextX;
-        });
+      filteredTrends.push(trend);
+    }
 
-        if (overlappingTrend) {
-          // Stop extending at the start of the overlapping trend
-          const stopX = overlappingTrend.points[0].x;
-          const stopY = lastPoint.y + slope * (stopX - lastPoint.x);
-          return {
-            ...prevTrend,
-            points: [
-              prevTrend.points[0],
-              { x: stopX, y: stopY } as Point,
-            ],
-          };
-        }
+    // Extend trends that have `shouldExtend` set to true
+    const extendedTrends = trendLines.map((trend) => {
+      if (!trend.shouldExtend) return trend;
 
-        return {
-          ...prevTrend,
-          points: [
-            prevTrend.points[0],
-            { x: nextX, y: nextY } as Point,
-          ],
-        };
-      });
+      const newEndX = data.length - 1; // Extend to the current data length
+      const newEndY = trend.slope * newEndX + trend.intercept; // Use original slope and intercept
 
-      const newConfirmedTrends = newTrends.filter(
-        (newTrend) =>
-          !prevTrends.some(
-            (prevTrend) =>
-              prevTrend.points[0].x === newTrend.points[0].x &&
-              prevTrend.points[0].y === newTrend.points[0].y
-          )
-      );
-
-      // Combine extended trends with new confirmed trends
-      return [...extendedTrends, ...newConfirmedTrends];
+      return {
+        ...trend,
+        points: [
+          ...trend.points,
+          { x: newEndX, y: newEndY }, // Extend with the new endpoint
+        ],
+      };
     });
+
+    // determine direction based on threshold. or some qualifier
+
+    const updatedTrendLines = [...extendedTrends, ...filteredTrends];
+    lastProcessedIndex.current = updatedTrendLines.length - 1;
+    // Update trend lines by appending only new valid trends and extending existing ones
+    setTrendLines(updatedTrendLines);
+
+    // Update the last processed index
+
+    console.log("Primary Trend:", primaryTrend.current);
   }, [data]);
 
   return (
@@ -105,7 +106,7 @@ const SimulatedChart = () => {
       <Button onClick={restart}>Restart</Button>
       <Slider
         defaultValue={[ticksPerInterval]}
-        max={4000}
+        max={8000}
         step={1}
         value={[ticksPerInterval]}
         onValueChange={([number]) => setTicksPerInterval(number)}

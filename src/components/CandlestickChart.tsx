@@ -106,6 +106,7 @@ const CandlestickChart: React.FC<ChartProps> = ({ data = [], defaultMax, default
 
   return (
     <div
+      className="bg-chart-bg"
       style={{
         width: dimensions.width,
         height: dimensions.height,

@@ -127,7 +127,7 @@ const calculateTrendLine = (
     endY = trendY;
   }
 
-  return { slope, intercept, points: [point1, { x: endX, y: endY }] };
+  return { slope, intercept, shouldExtend: true, points: [point1, { x: endX, y: endY }] };
 };
 
 // Main function to calculate trend lines with three-touch rule
@@ -151,4 +151,4 @@ const calculateThreePointTrendLines = (data: OHLCData[], windowSize = 2, angleTo
     .filter(Boolean) as TrendLine[];
 };
 
-export { calculateThreePointTrendLines as calculateTrend };
+export { calculateThreePointTrendLines as calculateTrend, findSequentialTurningPoints };
