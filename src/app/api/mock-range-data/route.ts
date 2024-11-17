@@ -5,7 +5,7 @@ import { tableFromIPC } from "apache-arrow";
 import type TickData from "~/types/TickData.type";
 
 export async function GET() {
-  const filePath = path.join('src/parsers/data', '2024', '08', `tickdata_2024-08-01.arrow`);
+  const filePath = path.join('src/data', '2024', '08', `tickdata_2024-08-01.arrow`);
   let data = [];
 
   if (fs.existsSync(filePath)) {

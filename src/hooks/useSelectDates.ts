@@ -17,7 +17,7 @@ interface FetchDateRangeParams {
 const fetchDateRangeData = async ({
   startDate,
   endDate,
-  folderPath = "src/parsers/data",
+  folderPath = "src/data",
 }: FetchDateRangeParams): Promise<TickData[]> => {
   if (!startDate || !endDate) {
     throw new Error("Please select both start and end dates.");
